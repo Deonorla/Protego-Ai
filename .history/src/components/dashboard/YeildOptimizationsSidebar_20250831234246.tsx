@@ -419,7 +419,7 @@ export const YieldOptimizationSidebar: React.FC<
           <button
             onClick={connectWallet}
             disabled={isConnecting}
-            className="w-full bg-gradient-to-r text-[.8rem] from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-all mb-3"
+            className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-all mb-3"
           >
             {isConnecting ? (
               <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />

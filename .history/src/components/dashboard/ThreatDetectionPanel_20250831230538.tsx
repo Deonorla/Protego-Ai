@@ -24,7 +24,6 @@ import { ContractAnalysisModal } from "./ContractAnalysisModal";
 interface ThreatDetectionPanelProps {
   onSecurityAction?: (action: string) => void;
   onSpellCast?: (actionName: string) => void;
-  onThreatsDetected?: (hasThreats: boolean) => void;
 }
 
 interface Threat {
@@ -49,7 +48,6 @@ interface SocialAlert {
 
 export const ThreatDetectionPanel: React.FC<ThreatDetectionPanelProps> = ({
   onSecurityAction,
-  onThreatsDetected,
 }) => {
   const [threats, setThreats] = useState<Threat[]>([]);
   const [socialAlerts, setSocialAlerts] = useState<SocialAlert[]>([]);
@@ -122,10 +120,6 @@ export const ThreatDetectionPanel: React.FC<ThreatDetectionPanelProps> = ({
     try {
       const data = await duckMcpService.fetchThreats();
       setThreats(data.threats || []);
-      console.log("Fetched threats:", data.threats);
-      if (onThreatsDetected) {
-        onThreatsDetected(data.threats && data.threats.length > 0);
-      }
     } catch (error) {
       console.error("Failed to fetch threats:", error);
     }

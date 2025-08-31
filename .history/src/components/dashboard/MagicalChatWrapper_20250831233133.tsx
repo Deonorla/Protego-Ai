@@ -74,7 +74,6 @@ export const SecurityDashboardWrapper: React.FC<
   const [showWalletDropdown, setShowWalletDropdown] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const [balance, setBalance] = useState("0.00");
-  const [hasActiveThreats, setHasActiveThreats] = useState(false);
 
   // Handle account changes
   const handleAccountsChanged = (accounts) => {
@@ -230,14 +229,6 @@ export const SecurityDashboardWrapper: React.FC<
     return "🦊"; // Only MetaMask now
   };
 
-  const handleThreatsDetected = (hasThreats: boolean) => {
-    setHasActiveThreats(hasThreats);
-    if (!hasThreats) {
-      setCurrentAction("No active threats detected");
-      setTimeout(() => setCurrentAction(""), 3000);
-    }
-  };
-
   // Check if wallet is already connected on component mount
   useEffect(() => {
     const checkConnection = async () => {
@@ -267,7 +258,7 @@ export const SecurityDashboardWrapper: React.FC<
       setThreatsBlocked((prev) => prev + Math.floor(Math.random() * 2) + 1);
     }, 20000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentAction]);
 
   const activateProtection = (actionName: string) => {
     setCurrentAction(actionName);
@@ -461,7 +452,7 @@ export const SecurityDashboardWrapper: React.FC<
           className={`w-80 border-r ${isDark ? "border-slate-800/50 bg-slate-900/30" : "border-slate-200/50 bg-white/30"} backdrop-blur-sm`}
         >
           <ThreatDetectionPanel
-            onThreatsDetected={handleThreatsDetected}
+            currentAction={currentAction}
             onSpellCast={activateProtection}
           />
         </div>

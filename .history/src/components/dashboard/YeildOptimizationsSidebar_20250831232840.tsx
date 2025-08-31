@@ -419,7 +419,7 @@ export const YieldOptimizationSidebar: React.FC<
           <button
             onClick={connectWallet}
             disabled={isConnecting}
-            className="w-full bg-gradient-to-r text-[.8rem] from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-all mb-3"
+            className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-all mb-3"
           >
             {isConnecting ? (
               <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
@@ -430,7 +430,7 @@ export const YieldOptimizationSidebar: React.FC<
           </button>
         ) : (
           <div className="space-y-2 mb-4">
-            <div className="flex items-center text-[.8rem] justify-between text-sm text-slate-700 dark:text-slate-300 p-2 bg-slate-100 dark:bg-slate-800 rounded-md">
+            <div className="flex items-center justify-between text-sm text-slate-700 dark:text-slate-300 p-2 bg-slate-100 dark:bg-slate-800 rounded-md">
               <span>
                 Connected: {walletAddress.substring(0, 6)}…
                 {walletAddress.substring(walletAddress.length - 4)}

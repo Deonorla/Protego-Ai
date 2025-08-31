@@ -24,7 +24,6 @@ import { ContractAnalysisModal } from "./ContractAnalysisModal";
 interface ThreatDetectionPanelProps {
   onSecurityAction?: (action: string) => void;
   onSpellCast?: (actionName: string) => void;
-  onThreatsDetected?: (hasThreats: boolean) => void;
 }
 
 interface Threat {
@@ -49,7 +48,6 @@ interface SocialAlert {
 
 export const ThreatDetectionPanel: React.FC<ThreatDetectionPanelProps> = ({
   onSecurityAction,
-  onThreatsDetected,
 }) => {
   const [threats, setThreats] = useState<Threat[]>([]);
   const [socialAlerts, setSocialAlerts] = useState<SocialAlert[]>([]);
@@ -112,8 +110,8 @@ export const ThreatDetectionPanel: React.FC<ThreatDetectionPanelProps> = ({
       },
     ];
 
-    setThreats([]);
-    setSocialAlerts([]);
+    setThreats(mockThreats);
+    setSocialAlerts(mockSocialAlerts);
   }, []);
 
   // Updated fetchThreats function to use real API
@@ -122,10 +120,6 @@ export const ThreatDetectionPanel: React.FC<ThreatDetectionPanelProps> = ({
     try {
       const data = await duckMcpService.fetchThreats();
       setThreats(data.threats || []);
-      console.log("Fetched threats:", data.threats);
-      if (onThreatsDetected) {
-        onThreatsDetected(data.threats && data.threats.length > 0);
-      }
     } catch (error) {
       console.error("Failed to fetch threats:", error);
     }
@@ -320,7 +314,7 @@ export const ThreatDetectionPanel: React.FC<ThreatDetectionPanelProps> = ({
         </div>
 
         {/* Social Alerts */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800/50">
+        {/* <div className="p-4 border-t border-slate-200 dark:border-slate-800/50">
           <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-3 flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
             Social Intelligence ({socialAlerts.length})
@@ -356,7 +350,7 @@ export const ThreatDetectionPanel: React.FC<ThreatDetectionPanelProps> = ({
               </div>
             ))}
           </div>
-        </div>
+        </div> */}
       </div>
 
       {/* Contract Analysis Modal */}
