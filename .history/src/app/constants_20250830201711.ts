@@ -1,12 +1,12 @@
 export const siteConfig = {
-  name: "Protego Ai",
+  name: "Protego",
   url:
     process.env.NEXT_PUBLIC_APP_URL ||
     "https://ai.eliza.how/" ||
     "http://localhost:4000",
   description:
     "Eliza is a powerful multi-agent simulation framework designed to create, deploy, and manage autonomous AI agents.",
-  ogImage: "/favicon.ico",
+  ogImage: "/og.png",
   creator: "Eliza Labs",
   icons: [
     {

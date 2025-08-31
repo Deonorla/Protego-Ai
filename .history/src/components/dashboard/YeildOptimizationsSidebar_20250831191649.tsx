@@ -3,30 +3,36 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   TrendingUp,
+  DollarSign,
   Activity,
   ArrowUpRight,
   ArrowDownRight,
   Coins,
   Shield,
   Star,
+  Target,
   Award,
   BarChart3,
   PieChart,
   Zap,
   CheckCircle,
   AlertCircle,
+  BadgeCheck,
   Wallet,
 } from "lucide-react";
 import { ethers } from "ethers";
 
 // =======================
-// Addresses — Only need yield vault
+// Addresses — FILL THESE
 // =======================
-const YIELD_VAULT_ADDRESS = "0x1234567890123456789012345678901234567890"; // TODO: replace
+const USDC_ADDRESS_DUCKCHAIN = "0xYourUSDCaddressOnDuckChain"; // TODO: replace
+const WTON_ADDRESS_DUCKCHAIN = "0xYourWTONaddressOnDuckChain"; // TODO: replace (Wrapped TON ERC-20)
+const PROTEGO_YIELD_VAULT_CORE_ADDRESS = "0xYourVaultAddressOnDuckChain"; // TODO: replace (ERC-4626-compatible)
 
 // =======================
 // DuckChain Network Configs
 // =======================
+// Mainnet
 const DUCKCHAIN_MAINNET = {
   chainId: 5545,
   name: "DuckChain Mainnet",
@@ -38,22 +44,62 @@ const DUCKCHAIN_MAINNET = {
   blockExplorerUrls: ["https://scan.duckchain.io"],
 };
 
-const DEFAULT_NETWORK = DUCKCHAIN_MAINNET;
+// Testnet (optional — uncomment when you want to target testnet; update RPC if differs)
+const DUCKCHAIN_TESTNET = {
+  chainId: 6545, // <— placeholder; replace with the official testnet chainId when available
+  name: "DuckChain Testnet",
+  nativeCurrency: { name: "TON", symbol: "TON", decimals: 18 },
+  rpcUrls: ["https://testnet-rpc.duckchain.io"], // from docs/examples
+  blockExplorerUrls: ["https://scan-testnet.duckchain.io"], // placeholder
+};
+
+// Toggle which network you want by default
+const DEFAULT_NETWORK = DUCKCHAIN_MAINNET; // or DUCKCHAIN_TESTNET
 
 // =======================
-// Simplified ABI for TON-only vault
+// Types
 // =======================
-const YIELD_VAULT_ABI = [
-  // Basic deposit/withdraw functions that accept native TON
-  "function deposit() payable returns (uint256 shares)",
-  "function withdraw(uint256 shares) returns (uint256)",
+interface EthereumProvider {
+  request: (args: { method: string; params?: any[] }) => Promise<any>;
+  on?: (event: string, callback: (...args: any[]) => void) => void;
+  removeListener?: (event: string, callback: (...args: any[]) => void) => void;
+  isMetaMask?: boolean;
+}
+
+// Remove global declaration for window.ethereum to avoid type conflicts.
+// The type should be defined in /src/app/types/global.d.ts.
+
+// =======================
+// Minimal ABIs
+// =======================
+const ERC20_ABI = [
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function totalSupply() view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  // optional EIP-2612 (not required here)
+  // "function nonces(address owner) view returns (uint256)",
+];
+
+// Wrapped TON (WTON) — WETH-style interface
+const WTON_ABI = [
+  ...ERC20_ABI,
+  "function deposit() payable",
+  "function withdraw(uint256)",
+];
+
+// Vault (ERC-4626-like)
+const PROTEGO_YIELD_VAULT_CORE_ABI = [
+  "function deposit(uint256 assets, address receiver) returns (uint256 shares)",
+  "function withdraw(uint256 shares, address receiver, address owner) returns (uint256 assets)",
   "function balanceOf(address account) view returns (uint256)",
-  "function getYieldRate() view returns (uint256)",
-  // Optional: Add any other vault-specific functions you need
 ];
 
 // =======================
-// UI Types (unchanged)
+// UI Types
 // =======================
 interface YieldOptimizationSidebarProps {
   onOptimize?: (strategy: string) => void;
@@ -105,11 +151,25 @@ export const YieldOptimizationSidebar: React.FC<
   const [statusMessage, setStatusMessage] = useState<string>(
     "Please connect your wallet."
   );
-  const [depositAmount, setDepositAmount] = useState<string>("1"); // Default to 1 TON
+  const [depositAmount, setDepositAmount] = useState<string>("100");
+  const [assetChoice, setAssetChoice] = useState<"USDC" | "TON">("USDC");
+  const [isApproving, setIsApproving] = useState(false);
   const [isDepositing, setIsDepositing] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+
+  // balances / token info
+  const [usdcInfo, setUsdcInfo] = useState<{
+    symbol: string;
+    decimals: number;
+  } | null>(null);
+  const [wtonInfo, setWtonInfo] = useState<{
+    symbol: string;
+    decimals: number;
+  } | null>(null);
+  const [usdcBalance, setUsdcBalance] = useState<string>("0.0");
   const [tonNativeBalance, setTonNativeBalance] = useState<string>("0.0");
+  const [wtonBalance, setWtonBalance] = useState<string>("0.0");
 
   // Mock data (unchanged UI demos)
   useEffect(() => {
@@ -169,6 +229,27 @@ export const YieldOptimizationSidebar: React.FC<
   // =======================
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+  // Create a custom provider that doesn't support ENS
+  const createDuckChainProvider = () => {
+    if (!window.ethereum) return null;
+
+    // Create a custom provider with ENS disabled
+    const provider = new ethers.providers.Web3Provider(window.ethereum as any);
+
+    // Override the resolveName method to prevent ENS resolution
+    console.log("name", name);
+    provider.resolveName = async (name: string) => {
+      // If it's a valid address, return it directly
+      if (ethers.utils.isAddress(name)) {
+        return name;
+      }
+      // Otherwise, throw an error or return null
+      throw new Error("ENS is not supported on DuckChain");
+    };
+
+    return provider;
+  };
+
   const switchToDuckChain = async () => {
     if (!window.ethereum) return false;
 
@@ -209,19 +290,64 @@ export const YieldOptimizationSidebar: React.FC<
     }
   };
 
+  const loadTokenInfo = useCallback(
+    async (
+      web3Provider: ethers.providers.Web3Provider,
+      tokenAddress: string,
+      isWton = false
+    ) => {
+      const contract = new ethers.Contract(
+        tokenAddress,
+        isWton ? WTON_ABI : ERC20_ABI,
+        web3Provider
+      );
+      const [symbol, decimals] = await Promise.all([
+        contract.symbol(),
+        contract.decimals(),
+      ]);
+      return { symbol: String(symbol), decimals: Number(decimals) };
+    },
+    []
+  );
+
   const refreshBalances = useCallback(async () => {
     if (!provider || !walletAddress) return;
     try {
-      // Only need native TON balance now
+      // Native TON balance - use getBalance directly
       const native = await provider.getBalance(walletAddress);
       setTonNativeBalance(ethers.utils.formatEther(native));
+
+      // USDC
+      if (USDC_ADDRESS_DUCKCHAIN && USDC_ADDRESS_DUCKCHAIN.startsWith("0x")) {
+        const usdc = new ethers.Contract(
+          USDC_ADDRESS_DUCKCHAIN,
+          ERC20_ABI,
+          provider
+        );
+        const bal = await usdc.balanceOf(walletAddress);
+        const dec = usdcInfo?.decimals ?? (await usdc.decimals());
+        setUsdcBalance(ethers.utils.formatUnits(bal, dec));
+      }
+
+      // WTON
+      if (WTON_ADDRESS_DUCKCHAIN && WTON_ADDRESS_DUCKCHAIN.startsWith("0x")) {
+        const wton = new ethers.Contract(
+          WTON_ADDRESS_DUCKCHAIN,
+          WTON_ABI,
+          provider
+        );
+        const bal = await wton.balanceOf(walletAddress);
+        const dec = wtonInfo?.decimals ?? (await wton.decimals());
+        setWtonBalance(ethers.utils.formatUnits(bal, dec));
+      }
     } catch (err) {
       console.error("Balance refresh error:", err);
+      // Don't show ENS-related errors to the user
       if (!err.message?.includes("ENS")) {
         setStatusMessage(`Balance refresh error: ${err.message}`);
       }
     }
-  }, [provider, walletAddress]);
+  }, [provider, walletAddress, usdcInfo?.decimals, wtonInfo?.decimals]);
 
   // =======================
   // Connect Wallet
@@ -246,9 +372,11 @@ export const YieldOptimizationSidebar: React.FC<
         return;
       }
 
-      const web3Provider = new ethers.providers.Web3Provider(
-        window.ethereum as any
-      );
+      // Use our custom provider with ENS disabled
+      const web3Provider = createDuckChainProvider();
+      if (!web3Provider) {
+        throw new Error("Failed to create provider");
+      }
 
       await web3Provider.send("eth_requestAccounts", []);
       const currentSigner = web3Provider.getSigner();
@@ -257,6 +385,27 @@ export const YieldOptimizationSidebar: React.FC<
       setProvider(web3Provider);
       setSigner(currentSigner);
       setWalletAddress(addr);
+
+      // Prefetch token info
+      try {
+        if (USDC_ADDRESS_DUCKCHAIN.startsWith("0x")) {
+          const info = await loadTokenInfo(
+            web3Provider,
+            USDC_ADDRESS_DUCKCHAIN
+          );
+          setUsdcInfo(info);
+        }
+        if (WTON_ADDRESS_DUCKCHAIN.startsWith("0x")) {
+          const info = await loadTokenInfo(
+            web3Provider,
+            WTON_ADDRESS_DUCKCHAIN,
+            true
+          );
+          setWtonInfo(info);
+        }
+      } catch (e) {
+        console.warn("Token info fetch warning:", e);
+      }
 
       await refreshBalances();
 
@@ -276,21 +425,84 @@ export const YieldOptimizationSidebar: React.FC<
     } finally {
       setIsConnecting(false);
     }
-  }, [isConnecting, refreshBalances]);
+  }, [isConnecting, loadTokenInfo, refreshBalances]);
 
   // Refresh balances on important changes
   useEffect(() => {
     refreshBalances();
-  }, [walletAddress, provider, refreshBalances]);
+  }, [walletAddress, provider, assetChoice, refreshBalances]);
 
   // =======================
-  // Deposit flow - SIMPLIFIED for TON only
+  // Approve (USDC or WTON depending on the selected asset)
+  // =======================
+  const handleApprove = async () => {
+    if (!signer || !walletAddress)
+      return setStatusMessage("Please connect your wallet first.");
+
+    const amount = depositAmount.trim();
+    if (!amount || Number(amount) <= 0)
+      return setStatusMessage("Enter a valid amount.");
+
+    try {
+      setIsApproving(true);
+      setStatusMessage("Preparing approval transaction…");
+
+      const isTON = assetChoice === "TON";
+      const tokenAddress = isTON
+        ? WTON_ADDRESS_DUCKCHAIN
+        : USDC_ADDRESS_DUCKCHAIN;
+      const tokenInfo = isTON ? wtonInfo : usdcInfo;
+
+      if (!tokenAddress || !tokenAddress.startsWith("0x"))
+        throw new Error("Token address is not set.");
+
+      // Ensure decimals known
+      let decimals = tokenInfo?.decimals;
+      const token = new ethers.Contract(
+        tokenAddress,
+        isTON ? WTON_ABI : ERC20_ABI,
+        signer
+      );
+      if (decimals == null) decimals = Number(await token.decimals());
+
+      const units = ethers.utils.parseUnits(amount, decimals);
+
+      // Show current allowance
+      try {
+        const allowance = await token.allowance(
+          walletAddress,
+          PROTEGO_YIELD_VAULT_CORE_ADDRESS
+        );
+        console.log("Current allowance:", allowance.toString());
+      } catch {}
+
+      const tx = await token.approve(PROTEGO_YIELD_VAULT_CORE_ADDRESS, units, {
+        gasLimit: 120000,
+      });
+      setStatusMessage(`Approval sent: ${tx.hash}`);
+      const receipt = await tx.wait();
+      console.log("Approval receipt:", receipt?.transactionHash);
+      setStatusMessage("✅ Approval confirmed.");
+    } catch (error: any) {
+      console.error("Approve error:", error);
+      setStatusMessage(
+        `❌ Approval failed: ${error?.reason || error?.message || error}`
+      );
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  // =======================
+  // Deposit flow
+  // - If USDC: deposit directly
+  // - If TON: auto-wrap to WTON (deposit() payable), then approve (if needed) and deposit to vault
   // =======================
   const handleDeposit = async () => {
     if (!signer || !walletAddress || !provider)
       return setStatusMessage("Please connect your wallet first.");
 
-    if (!YIELD_VAULT_ADDRESS.startsWith("0x"))
+    if (!PROTEGO_YIELD_VAULT_CORE_ADDRESS.startsWith("0x"))
       return setStatusMessage("Vault address not configured.");
 
     const amount = depositAmount.trim();
@@ -300,30 +512,65 @@ export const YieldOptimizationSidebar: React.FC<
     setIsDepositing(true);
 
     try {
-      const vault = new ethers.Contract(
-        YIELD_VAULT_ADDRESS,
-        YIELD_VAULT_ABI,
+      const isTON = assetChoice === "TON";
+      const tokenAddress = isTON
+        ? WTON_ADDRESS_DUCKCHAIN
+        : USDC_ADDRESS_DUCKCHAIN;
+      if (!tokenAddress || !tokenAddress.startsWith("0x"))
+        throw new Error("Token address is not set.");
+
+      const token = new ethers.Contract(
+        tokenAddress,
+        isTON ? WTON_ABI : ERC20_ABI,
         signer
       );
 
-      // Convert TON amount to wei
-      const valueWei = ethers.utils.parseEther(amount);
+      // Ensure decimals
+      const decimals: number = isTON
+        ? (wtonInfo?.decimals ?? (await token.decimals()))
+        : (usdcInfo?.decimals ?? (await token.decimals()));
 
-      setStatusMessage("Depositing TON into Yield Vault…");
+      // If TON selected, wrap first (WTON.deposit with native value)
+      if (isTON) {
+        const valueWei = ethers.utils.parseEther(amount);
+        setStatusMessage("Wrapping TON → WTON…");
+        const wrapTx = await token.deposit({
+          value: valueWei,
+          gasLimit: 150000,
+        });
+        await wrapTx.wait();
+        await wait(800);
+      }
 
-      // Direct deposit with native TON - no approval needed!
-      const tx = await vault.deposit({
-        value: valueWei,
+      // Approve (idempotent — user may have done this already)
+      const units = ethers.utils.parseUnits(amount, decimals);
+      setStatusMessage("Approving vault to spend tokens…");
+      const approveTx = await token.approve(
+        PROTEGO_YIELD_VAULT_CORE_ADDRESS,
+        units,
+        { gasLimit: 120000 }
+      );
+      await approveTx.wait();
+
+      // Now deposit to vault
+      const vault = new ethers.Contract(
+        PROTEGO_YIELD_VAULT_CORE_ADDRESS,
+        PROTEGO_YIELD_VAULT_CORE_ABI,
+        signer
+      );
+
+      setStatusMessage("Depositing into Protego Yield Vault…");
+      const tx = await vault.deposit(units, walletAddress, {
         gasLimit: 250000,
       });
-
       setStatusMessage(`Deposit sent: ${tx.hash}`);
       await tx.wait();
-      setStatusMessage(`✅ Deposit of ${amount} TON successful!`);
+      setStatusMessage("✅ Deposit successful!");
 
       await refreshBalances();
     } catch (error: any) {
       console.error("Deposit error:", error);
+      // Don't show ENS-related errors to the user
       if (!error.message?.includes("ENS")) {
         setStatusMessage(
           `❌ Deposit failed: ${error?.reason || error?.message || error}`
@@ -331,41 +578,6 @@ export const YieldOptimizationSidebar: React.FC<
       }
     } finally {
       setIsDepositing(false);
-    }
-  };
-
-  // =======================
-  // Withdraw function (optional)
-  // =======================
-  const handleWithdraw = async () => {
-    if (!signer || !walletAddress) return;
-
-    setIsWithdrawing(true);
-    try {
-      const vault = new ethers.Contract(
-        YIELD_VAULT_ADDRESS,
-        YIELD_VAULT_ABI,
-        signer
-      );
-
-      // Get user's shares balance
-      const shares = await vault.balanceOf(walletAddress);
-      if (shares.isZero()) {
-        setStatusMessage("No shares to withdraw");
-        return;
-      }
-
-      setStatusMessage("Withdrawing from vault…");
-      const tx = await vault.withdraw(shares, { gasLimit: 250000 });
-      await tx.wait();
-      setStatusMessage("✅ Withdrawal successful!");
-
-      await refreshBalances();
-    } catch (error: any) {
-      console.error("Withdraw error:", error);
-      setStatusMessage(`❌ Withdrawal failed: ${error.message}`);
-    } finally {
-      setIsWithdrawing(false);
     }
   };
 
@@ -393,7 +605,6 @@ export const YieldOptimizationSidebar: React.FC<
       return "text-yellow-600 bg-yellow-50 border-yellow-200 dark:text-yellow-400 dark:bg-yellow-500/10 dark:border-yellow-500/20";
     return "text-red-600 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-500/10 dark:border-red-500/20";
   };
-
   const getRiskIcon = (riskScore: number) => {
     if (riskScore >= 80)
       return <CheckCircle className="w-3 h-3 text-emerald-500" />;
@@ -403,7 +614,7 @@ export const YieldOptimizationSidebar: React.FC<
   };
 
   // =======================
-  // Render - SIMPLIFIED UI
+  // Render
   // =======================
   return (
     <div className="h-full flex flex-col bg-white/50 dark:bg-slate-900/30 backdrop-blur-sm">
@@ -412,7 +623,7 @@ export const YieldOptimizationSidebar: React.FC<
         <div className="flex items-center gap-3 mb-4">
           <TrendingUp className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
           <h2 className="text-lg font-semibold text-slate-800 dark:text-white">
-            TON Yield Optimization
+            Yield Optimization
           </h2>
         </div>
 
@@ -441,6 +652,28 @@ export const YieldOptimizationSidebar: React.FC<
                 TON: {Number(tonNativeBalance).toFixed(4)}
               </span>
             </div>
+
+            {/* Balances */}
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="p-2 rounded bg-slate-50 dark:bg-slate-800/50 border">
+                <div className="text-slate-500">USDC</div>
+                <div className="font-medium text-slate-800 dark:text-white">
+                  {Number(usdcBalance || 0).toFixed(2)}
+                </div>
+              </div>
+              <div className="p-2 rounded bg-slate-50 dark:bg-slate-800/50 border">
+                <div className="text-slate-500">TON</div>
+                <div className="font-medium text-slate-800 dark:text-white">
+                  {Number(tonNativeBalance || 0).toFixed(4)}
+                </div>
+              </div>
+              <div className="p-2 rounded bg-slate-50 dark:bg-slate-800/50 border">
+                <div className="text-slate-500">WTON</div>
+                <div className="font-medium text-slate-800 dark:text-white">
+                  {Number(wtonBalance || 0).toFixed(4)}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -448,30 +681,56 @@ export const YieldOptimizationSidebar: React.FC<
           {statusMessage}
         </p>
 
-        {/* Amount Input - SIMPLIFIED */}
+        {/* Asset selector + Amount */}
         {walletAddress && (
-          <div className="mb-4">
-            <label
-              htmlFor="depositAmount"
-              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
-            >
-              Amount (TON)
-            </label>
-            <input
-              type="number"
-              id="depositAmount"
-              value={depositAmount}
-              onChange={(e) => setDepositAmount(e.target.value)}
-              placeholder="e.g., 1.0"
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              min="0"
-              step="0.1"
-            />
+          <div className="mb-4 space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setAssetChoice("USDC")}
+                className={`px-3 py-2 rounded border text-sm font-medium transition-all ${
+                  assetChoice === "USDC"
+                    ? "bg-blue-500/10 border-blue-400 text-blue-600 dark:text-blue-400"
+                    : "bg-slate-50 dark:bg-slate-800/50 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                }`}
+              >
+                Use USDC (ERC-20)
+              </button>
+              <button
+                onClick={() => setAssetChoice("TON")}
+                className={`px-3 py-2 rounded border text-sm font-medium transition-all ${
+                  assetChoice === "TON"
+                    ? "bg-emerald-500/10 border-emerald-400 text-emerald-600 dark:text-emerald-400"
+                    : "bg-slate-50 dark:bg-slate-800/50 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                }`}
+              >
+                Use TON → WTON (auto-wrap)
+              </button>
+            </div>
+
+            <div>
+              <label
+                htmlFor="depositAmount"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+              >
+                Amount (
+                {assetChoice === "USDC" ? usdcInfo?.symbol || "USDC" : "TON"})
+              </label>
+              <input
+                type="number"
+                id="depositAmount"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                placeholder="e.g., 100"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="0"
+                step="0.0001"
+              />
+            </div>
           </div>
         )}
 
-        {/* Actions - SIMPLIFIED */}
-        <div className="grid grid-cols-1 gap-2">
+        {/* Actions */}
+        <div className="grid grid-cols-2 gap-2">
           <button
             onClick={handleDeposit}
             disabled={
@@ -490,34 +749,41 @@ export const YieldOptimizationSidebar: React.FC<
             ) : (
               <>
                 <ArrowDownRight className="w-4 h-4" />
-                Deposit {depositAmount} TON
+                Deposit {depositAmount} {assetChoice}
               </>
             )}
           </button>
 
           <button
-            onClick={handleWithdraw}
-            disabled={isWithdrawing || !walletAddress}
+            onClick={handleApprove}
+            disabled={
+              isApproving ||
+              !walletAddress ||
+              !depositAmount ||
+              Number(depositAmount) <= 0
+            }
             className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 disabled:opacity-50 px-4 py-2 rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-all"
           >
-            {isWithdrawing ? (
+            {isApproving ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                Withdrawing…
+                Approving…
               </>
             ) : (
               <>
-                <ArrowUpRight className="w-4 h-4" />
-                Withdraw All
+                <BadgeCheck className="w-4 h-4" />
+                Approve{" "}
+                {assetChoice === "USDC"
+                  ? usdcInfo?.symbol || "USDC"
+                  : wtonInfo?.symbol || "WTON"}
               </>
             )}
           </button>
         </div>
       </div>
 
-      {/* Rest of the UI remains unchanged */}
       {/* Wallet Analysis */}
-      {/* {walletAnalysis && (
+      {walletAnalysis && (
         <div className="p-4 border-b border-slate-200 dark:border-slate-800/50">
           <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-3 flex items-center gap-2">
             <PieChart className="w-4 h-4" />
@@ -602,7 +868,7 @@ export const YieldOptimizationSidebar: React.FC<
             </div>
           </div>
         </div>
-      )} */}
+      )}
 
       {/* Staking Opportunities (mock) */}
       <div className="flex-1 overflow-y-auto">

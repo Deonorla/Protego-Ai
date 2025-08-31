@@ -517,7 +517,7 @@ export const YieldOptimizationSidebar: React.FC<
 
       {/* Rest of the UI remains unchanged */}
       {/* Wallet Analysis */}
-      {/* {walletAnalysis && (
+      {walletAnalysis && (
         <div className="p-4 border-b border-slate-200 dark:border-slate-800/50">
           <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-3 flex items-center gap-2">
             <PieChart className="w-4 h-4" />
@@ -602,7 +602,7 @@ export const YieldOptimizationSidebar: React.FC<
             </div>
           </div>
         </div>
-      )} */}
+      )}
 
       {/* Staking Opportunities (mock) */}
       <div className="flex-1 overflow-y-auto">

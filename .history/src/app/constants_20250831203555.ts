@@ -1,5 +1,5 @@
 export const siteConfig = {
-  name: "Protego Ai",
+  name: "Protego",
   url:
     process.env.NEXT_PUBLIC_APP_URL ||
     "https://ai.eliza.how/" ||

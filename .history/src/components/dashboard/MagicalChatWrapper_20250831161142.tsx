@@ -328,15 +328,15 @@ export const SecurityDashboardWrapper: React.FC<
           }
         }}
       >
-        <div className=" mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center">
             <Logo
               className={` ${isDark ? "text-blue-400" : "text-blue-600"}`}
               width={100}
-              height={50}
+              height={321}
             />
 
-            <span className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-emerald-500 bg-clip-text text-transparent">
+            <span className="text-xl font-bold bg-gradient-to-r from-blue-500 to-emerald-500 bg-clip-text text-transparent">
               Protego
             </span>
           </div>
@@ -436,11 +436,11 @@ export const SecurityDashboardWrapper: React.FC<
           </div>
 
           <div className="flex items-center gap-3">
-            {/* <button
+            <button
               className={`p-2 rounded-lg ${isDark ? "hover:bg-slate-800 text-slate-400 hover:text-white" : "hover:bg-slate-100 text-slate-600 hover:text-slate-900"} transition-all duration-200`}
             >
               <Settings className="w-5 h-5" />
-            </button> */}
+            </button>
           </div>
         </div>
       </nav>

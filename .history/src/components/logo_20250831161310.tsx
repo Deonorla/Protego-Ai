@@ -12,7 +12,7 @@ interface LogoProps {
 export function Logo({ width = 12, height = 12, className = "" }: LogoProps) {
   return (
     <div className={clsx(["select-none", className])}>
-      {/* <Image src={logo} alt="sheild" width={width} height={height} priority /> */}
+      <Image src={logo} alt="sheild" width={width} height={height} priority />
     </div>
   );
 }
